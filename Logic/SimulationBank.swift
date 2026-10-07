@@ -19,8 +19,14 @@ struct BankConfig: Sendable, Hashable {
     var pathsPerSetting: Int = 1000
     /// 1本あたりの最大ゲーム数
     var maxGames: Int = 8000
-    /// グラフを記録する間隔（G）
-    var step: Int = 20
+    /// グラフを記録する間隔（G）。ゲーム数が少ないときは細かく記録して、序盤の揺れも滑らかに描けるようにする
+    var step: Int {
+        switch maxGames {
+        case ...2000: return 5
+        case ...4000: return 10
+        default: return 20
+        }
+    }
     var seed: UInt64 = 20251001
 }
 

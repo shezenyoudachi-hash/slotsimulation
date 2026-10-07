@@ -40,11 +40,33 @@ struct CheckpointStat: Identifiable {
     var highLowAccuracy: Double
 }
 
+/// グラフの軸の範囲と目盛り
+struct AxisScale {
+    var domain: ClosedRange<Double>
+    var ticks: [Double]
+
+    /// 値の範囲から、切りのいい目盛り（1, 2, 5 × 10^n 刻み）を付けた範囲を作る
+    static func nice(min lo: Double, max hi: Double, targetTicks: Int = 6, includeZero: Bool = true) -> AxisScale {
+        var lo = lo, hi = hi
+        if includeZero { lo = Swift.min(lo, 0); hi = Swift.max(hi, 0) }
+        if hi - lo < 1 { lo -= 50; hi += 50 }
+        let raw = (hi - lo) / Double(Swift.max(targetTicks - 1, 1))
+        let mag = pow(10, floor(log10(raw)))
+        let step = [1.0, 2.0, 2.5, 5.0, 10.0].map { $0 * mag }.first { $0 >= raw } ?? 10 * mag
+        let start = floor(lo / step) * step
+        let end = ceil(hi / step) * step
+        let ticks = Array(Swift.stride(from: start, through: end + step * 0.001, by: step))
+        return AxisScale(domain: start...end, ticks: ticks)
+    }
+}
+
 extension SimulationBank {
     static let defaultCheckpoints = [100, 200, 500, 1000, 2000, 4000, 8000]
 
-    func bands(maxPoints: Int = 60) -> [BandPoint] {
-        let idxs = Stats.thinned(0...(pointCount - 1), maxPoints: maxPoints)
+    /// 差枚の帯を計算する。upToGames を指定するとその G 数までの範囲だけを細かく計算する
+    func bands(upToGames: Int? = nil, maxPoints: Int = 60) -> [BandPoint] {
+        let last = upToGames.map { index(forGames: $0) } ?? (pointCount - 1)
+        let idxs = Stats.thinned(0...max(last, 1), maxPoints: maxPoints)
         var out: [BandPoint] = []
         for s in 0..<spec.settingCount {
             let range = paths(ofSetting: s)
