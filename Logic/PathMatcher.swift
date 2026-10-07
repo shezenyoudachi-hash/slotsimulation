@@ -96,13 +96,18 @@ extension SimulationBank {
         let bigVar = q.big != nil ? meanCount(bigAt) : 1
         let regVar = q.reg != nil ? meanCount(regAt) : 1
 
+        // 途中経過は点の数によらず「2点ぶん」の重みにする。
+        // グラフをなぞると点が20個ほどになり、そのままだと形の比較だけで決まってしまうため。
+        let lastJ = idxs.count - 1
+        let pastWeight = lastJ > 0 ? 2.0 / Double(lastJ) : 0
+
         var dist = [(Double, Int)]()
         dist.reserveCapacity(pathCount)
         for p in 0..<pathCount {
             var d = 0.0
             for (j, i) in idxs.enumerated() {
                 let z = (diffAt(p, i) - Double(points[j].diff)) / scales[j]
-                d += z * z
+                d += z * z * (j == lastJ ? 1 : pastWeight)
             }
             if let b = q.big { let x = Double(bigAt(p, curIdx) - b); d += x * x / bigVar }
             if let r = q.reg { let x = Double(regAt(p, curIdx) - r); d += x * x / regVar }

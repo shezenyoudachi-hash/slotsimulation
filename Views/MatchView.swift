@@ -10,10 +10,8 @@ struct MatchView: View {
     @State private var useBonus = true
     @State private var big = 3
     @State private var reg = 2
-    @State private var pastPoints: [ObservedPoint] = [
-        ObservedPoint(games: 200, diff: 150),
-        ObservedPoint(games: 500, diff: -200)
-    ]
+    @State private var pastPoints: [ObservedPoint] = []
+    @State private var showTrace = false
     @State private var horizonAdd = 2000
     @State private var neighbors = 300
     @State private var result: MatchResult?
@@ -34,26 +32,35 @@ struct MatchView: View {
                 }
 
                 Section {
-                    ForEach($pastPoints) { $p in
-                        HStack {
-                            TextField("G", value: $p.games, format: .number)
-                                .keyboardType(.numberPad)
-                            Text("G").foregroundStyle(.secondary)
-                            TextField("差枚", value: $p.diff, format: .number)
-                                .keyboardType(.numbersAndPunctuation)
-                                .multilineTextAlignment(.trailing)
-                            Text("枚").foregroundStyle(.secondary)
-                        }
+                    Button {
+                        showTrace = true
+                    } label: {
+                        Label("グラフをなぞって入力", systemImage: "hand.draw")
                     }
-                    .onDelete { pastPoints.remove(atOffsets: $0) }
-                    Button("点を追加") {
-                        let g = min((pastPoints.map(\.games).max() ?? 0) + 100, max(currentGames - 1, 1))
-                        pastPoints.append(ObservedPoint(games: g, diff: 0))
+                    .disabled(currentGames <= 0)
+
+                    if !pastPoints.isEmpty {
+                        LabeledContent("取り込み済み", value: "\(pastPoints.count)点")
+                        DisclosureGroup("点を個別に直す") {
+                            ForEach($pastPoints) { $p in
+                                HStack {
+                                    TextField("G", value: $p.games, format: .number)
+                                        .keyboardType(.numberPad)
+                                    Text("G").foregroundStyle(.secondary)
+                                    TextField("差枚", value: $p.diff, format: .number)
+                                        .keyboardType(.numbersAndPunctuation)
+                                        .multilineTextAlignment(.trailing)
+                                    Text("枚").foregroundStyle(.secondary)
+                                }
+                            }
+                            .onDelete { pastPoints.remove(atOffsets: $0) }
+                        }
+                        Button("途中経過を消す", role: .destructive) { pastPoints = [] }
                     }
                 } header: {
                     Text("途中経過（任意）")
                 } footer: {
-                    Text("データカウンターのグラフから、山や谷など特徴的な点を読み取って入れると形の比較が正確になります。現在のゲーム数より前の点だけが使われます。")
+                    Text("先に「現在のゲーム数」を入れてから、データカウンターのグラフの写真をなぞってください。現在の差枚も自動で入ります。")
                 }
 
                 Section("同定の条件") {
@@ -72,6 +79,13 @@ struct MatchView: View {
                 }
             }
             .navigationTitle("類似グラフ同定")
+            .sheet(isPresented: $showTrace) {
+                GraphTraceView(currentGames: currentGames) { points, diff in
+                    pastPoints = points
+                    currentDiff = diff
+                    result = nil
+                }
+            }
         }
     }
 
