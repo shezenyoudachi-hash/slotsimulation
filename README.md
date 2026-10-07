@@ -10,13 +10,12 @@
 | 揺れ分析 | 設定ごとに大量のスランプグラフを作り、差枚の帯（90% / 50%）を重ねて表示。100 / 200 / 500 / 1000 / 2000 / 4000 / 8000G 時点の差枚幅・合算の幅・勝率・設定の的中率を一覧 |
 | 類似グラフ | 現在のG数と差枚、途中経過の点、BIG/REG を入力すると、似たシミュレーションを探す。そこから設定の構成比と、今後の差枚の分布（扇形）を表示 |
 
-## Xcode への組み込み
+## Xcode で開く
 
-1. Xcode で **File > New > Project > iOS > App** を選ぶ（Interface: SwiftUI, Storage: None）
-2. Deployment Target を **iOS 17.0 以上**にする（`@Observable` と Swift Charts を使うため）
-3. 自動生成された `ContentView.swift` と `<プロジェクト名>App.swift` を削除する
-4. `App/` `Logic/` `Models/` `Views/` の4フォルダをプロジェクトにドラッグする（「Copy items if needed」にチェック）
-5. 実機または Simulator で実行する
+1. `SlotAnalyzer.xcodeproj` をダブルクリックして開く（Xcode 16 以上）
+2. 上部のデバイス選択で iPhone の Simulator を選び、Run（▶）で実行する
+
+`App/` `Logic/` `Models/` `Views/` はフォルダごとプロジェクトに同期されているので、これらのフォルダに置いた .swift ファイルは自動でビルド対象になります。実機で動かすときは、ターゲットの Signing & Capabilities で自分の Team を選んでください。
 
 シミュレーションの生成は **Release ビルドのほうが数倍速い**です。Debug で遅いと感じたら、Scheme の Run を Release に切り替えてください。
 
