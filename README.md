@@ -31,7 +31,12 @@
 
 最終のG数・BIG・REGは、その日の合計（途中の分を含む）です。
 
-`SampleData/` に、動作確認用の**架空の**サンプルデータがあります（`make_sample.py` で作成。10台×30日、店の設定配分は「高設定少なめ」）。`sample-validation-answers.csv` は各台の本当の設定です。
+`SampleData/` に、動作確認用の**架空の**サンプルデータがあります（`make_sample.py` で作成。どちらも10台×30日）。
+
+| ファイル | 店の設定配分 | 本当の設定 |
+|---|---|---|
+| `sample-validation.csv` | 高設定少なめ（40/25/15/10/6/4%） | `sample-validation-answers.csv` |
+| `sample-validation-uniform.csv` | 均等（各1/6） | `sample-validation-uniform-answers.csv` |
 
 ## 構成
 
