@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct SlotAnalyzerApp: App {
     @State private var store = BankStore()
+    @State private var validationStore = ValidationStore()
 
     var body: some Scene {
         WindowGroup {
@@ -13,8 +14,11 @@ struct SlotAnalyzerApp: App {
                     .tabItem { Label("揺れ分析", systemImage: "waveform.path.ecg") }
                 MatchView()
                     .tabItem { Label("類似グラフ", systemImage: "chart.line.uptrend.xyaxis") }
+                ValidationView()
+                    .tabItem { Label("検証", systemImage: "checkmark.seal") }
             }
             .environment(store)
+            .environment(validationStore)
         }
     }
 }
