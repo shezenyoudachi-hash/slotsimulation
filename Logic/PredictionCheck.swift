@@ -67,11 +67,20 @@ enum Binomial {
         let mean = Double(n) * p
         let sd = (Double(n) * p * (1 - p)).squareRoot()
         let kmax = min(n, Int(mean + 12 * sd + 15))
-        let lnN = lgamma(Double(n) + 1)
-        return (0...kmax).map { k in
-            let k = Double(k)
-            return exp(lnN - lgamma(k + 1) - lgamma(Double(n) - k + 1) + k * log(p) + (Double(n) - k) * log1p(-p))
+        // 長い式を1行で書くと型の推論が終わらずビルドエラーになるので、項ごとに分けて型を明示する
+        let nn: Double = Double(n)
+        let lnN: Double = lgamma(nn + 1)
+        let logP: Double = log(p)
+        let logQ: Double = log1p(-p)
+        var result: [Double] = []
+        result.reserveCapacity(kmax + 1)
+        for i in 0...kmax {
+            let k: Double = Double(i)
+            let logChoose: Double = lnN - lgamma(k + 1) - lgamma(nn - k + 1)
+            let logProb: Double = logChoose + k * logP + (nn - k) * logQ
+            result.append(exp(logProb))
         }
+        return result
     }
 }
 
@@ -171,8 +180,9 @@ enum PredictionCheck {
                 let base = Double(n) * perGame
                 for (b, qb) in bm.enumerated() where qb > 1e-10 {
                     for (k, qr) in rm.enumerated() where qb * qr > 1e-12 {
-                        diffPairs.append((base + spec.bigPayout * Double(b) + spec.regPayout * Double(k),
-                                          post[s] * qb * qr))
+                        let bonusOut: Double = spec.bigPayout * Double(b) + spec.regPayout * Double(k)
+                        let prob: Double = post[s] * qb * qr
+                        diffPairs.append((base + bonusOut, prob))
                     }
                 }
             }
