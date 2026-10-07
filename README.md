@@ -49,7 +49,7 @@ Logic/PathMatcher.swift         類似グラフ同定と今後の動きの集計
 Logic/PredictionCheck.swift     途中データからの予測と実績の比較
 Models/ValidationRecord.swift   検証用の記録・端末内保存・CSV
 App/BankStore.swift             生成状態をタブ間で共有、バックグラウンド実行
-Views/                          3タブの画面
+Views/                          4タブの画面となぞり入力の画面
 ```
 
 ## 計算モデル
