@@ -10,6 +10,20 @@ struct HitEvent: Codable, Identifiable, Hashable {
     /// この当たりまでに数えたぶどう（前の当たり〜この当たり、自分が打った分）
     var grapes = 0
     var time = Date()
+
+    init(kind: Kind, gap: Int, grapes: Int = 0, time: Date = Date()) {
+        self.kind = kind; self.gap = gap; self.grapes = grapes; self.time = time
+    }
+
+    /// 項目を増やしても古い記録を読めるよう、無い項目は初期値で埋める
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        kind = try c.decode(Kind.self, forKey: .kind)
+        gap = try c.decode(Int.self, forKey: .gap)
+        grapes = try c.decodeIfPresent(Int.self, forKey: .grapes) ?? 0
+        time = try c.decodeIfPresent(Date.self, forKey: .time) ?? Date()
+    }
 }
 
 /// 1台分の実戦記録。着席時のカウンターの数字から始めて、当たりを順に足していく
@@ -17,6 +31,8 @@ struct PlaySession: Codable, Identifiable, Hashable {
     var id = UUID()
     var date = Date()
     var unit: Int?
+    /// 機種名（記録を始めた時の機種）
+    var machine: String?
 
     /// 着席時のデータカウンター（総回転・BIG・REG・スタート）
     var startTotal = 0
@@ -29,7 +45,29 @@ struct PlaySession: Codable, Identifiable, Hashable {
     var pendingGrapes = 0
     /// やめた時のスタート（nil なら打っている途中）
     var endGap: Int?
+    /// やめた時刻
+    var endedAt: Date?
     var memo = ""
+
+    init() {}
+
+    /// 項目を増やしても古い記録を読めるよう、無い項目は初期値で埋める
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        date = try c.decodeIfPresent(Date.self, forKey: .date) ?? Date()
+        unit = try c.decodeIfPresent(Int.self, forKey: .unit)
+        machine = try c.decodeIfPresent(String.self, forKey: .machine)
+        startTotal = try c.decodeIfPresent(Int.self, forKey: .startTotal) ?? 0
+        startBig = try c.decodeIfPresent(Int.self, forKey: .startBig) ?? 0
+        startReg = try c.decodeIfPresent(Int.self, forKey: .startReg) ?? 0
+        startGap = try c.decodeIfPresent(Int.self, forKey: .startGap) ?? 0
+        hits = try c.decodeIfPresent([HitEvent].self, forKey: .hits) ?? []
+        pendingGrapes = try c.decodeIfPresent(Int.self, forKey: .pendingGrapes) ?? 0
+        endGap = try c.decodeIfPresent(Int.self, forKey: .endGap)
+        endedAt = try c.decodeIfPresent(Date.self, forKey: .endedAt)
+        memo = try c.decodeIfPresent(String.self, forKey: .memo) ?? ""
+    }
 
     var isEnded: Bool { endGap != nil }
     var bigCount: Int { startBig + hits.filter { $0.kind == .big }.count }
@@ -113,6 +151,8 @@ struct PlaySession: Codable, Identifiable, Hashable {
 @MainActor
 final class PlayStore {
     private(set) var sessions: [PlaySession] = []
+    /// 直前の書き出し結果（画面に一度だけ出す。保存はしない）
+    var lastExportMessage: String?
 
     private let fileURL: URL = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -137,7 +177,17 @@ final class PlayStore {
         guard let data = try? Data(contentsOf: fileURL) else { return }
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .iso8601
-        sessions = (try? dec.decode([PlaySession].self, from: data)) ?? []
+        do {
+            sessions = try dec.decode([PlaySession].self, from: data)
+        } catch {
+            // 読めなかったファイルは上書きせず、別名で残しておく
+            let f = DateFormatter()
+            f.dateFormat = "yyyyMMdd-HHmmss"
+            let backup = fileURL.deletingLastPathComponent()
+                .appendingPathComponent("play-sessions-読めなかった-\(f.string(from: Date())).json")
+            try? FileManager.default.copyItem(at: fileURL, to: backup)
+            sessions = []
+        }
     }
 
     private func save() {

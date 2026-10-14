@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// 実戦中の当たりを記録する画面。上に YouTube（任意）、下に記録
 struct RecordView: View {
@@ -50,6 +51,7 @@ struct RecordView: View {
             }
             .navigationTitle("記録")
             .navigationBarTitleDisplayMode(.inline)
+            .exportAlert(Bindable(playStore).lastExportMessage)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
@@ -126,6 +128,7 @@ private struct PiPSpace: View {
 // MARK: - 着席
 
 private struct StartSessionForm: View {
+    @Environment(BankStore.self) private var bankStore
     @Environment(PlayStore.self) private var playStore
 
     @State private var unit: Int?
@@ -145,6 +148,7 @@ private struct StartSessionForm: View {
                 Button("記録を始める") {
                     var s = PlaySession()
                     s.unit = unit
+                    s.machine = bankStore.spec.name
                     s.startTotal = total ?? 0
                     s.startBig = big ?? 0
                     s.startReg = reg ?? 0
@@ -158,6 +162,7 @@ private struct StartSessionForm: View {
                 Text("0Gから打つときは、総回転・BIG・REG・スタートをすべて0にします。")
             }
             HistorySection()
+            ExportSettingsSection()
         }
     }
 
@@ -229,6 +234,9 @@ private struct ActiveSessionForm: View {
             Button("記録を終える") {
                 var s = session
                 s.endGap = Int(endGapText.trimmingCharacters(in: .whitespaces)) ?? 0
+                s.endedAt = Date()
+                let r = SessionExporter.export(s, spec: bankStore.spec)
+                playStore.lastExportMessage = r.message(fileName: SessionExporter.fileName(s))
                 playStore.upsert(s)
             }
             Button("キャンセル", role: .cancel) {}
@@ -360,6 +368,7 @@ private struct SessionDetailView: View {
     let sessionID: UUID
     @State private var added = false
     @State private var confirmDelete = false
+    @State private var exportMessage: String?
 
     var body: some View {
         if let s = playStore.sessions.first(where: { $0.id == sessionID }) {
@@ -384,6 +393,10 @@ private struct SessionDetailView: View {
                         if let r = s.validationRecord() { validationStore.append([r]); added = true }
                     }
                     .disabled(added)
+                    Button("ファイルに書き出し直す") {
+                        exportMessage = SessionExporter.export(s, spec: bankStore.spec)
+                            .message(fileName: SessionExporter.fileName(s))
+                    }
                     Button("この記録を削除", role: .destructive) { confirmDelete = true }
                 }
             }
@@ -391,8 +404,88 @@ private struct SessionDetailView: View {
             .confirmationDialog("この記録を削除しますか？", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("削除", role: .destructive) { playStore.delete(sessionID); dismiss() }
             }
+            .exportAlert($exportMessage)
         } else {
             Text("記録が見つかりません")
         }
+    }
+}
+
+// MARK: - 書き出し
+
+extension SessionExporter.Result {
+    func message(fileName: String) -> String {
+        var lines: [String] = []
+        if savedLocal { lines.append("「ファイル」アプリの SlotAnalyzer ›「実戦記録」に保存しました。") }
+        if savedChosen { lines.append("選んだフォルダにも保存しました。") }
+        if let error { lines.append(error) }
+        lines.append(fileName)
+        return lines.joined(separator: "\n")
+    }
+}
+
+private struct ExportAlert: ViewModifier {
+    @Binding var message: String?
+    func body(content: Content) -> some View {
+        content.alert("記録の書き出し", isPresented: Binding(
+            get: { message != nil }, set: { if !$0 { message = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(message ?? "")
+        }
+    }
+}
+
+extension View {
+    fileprivate func exportAlert(_ message: Binding<String?>) -> some View {
+        modifier(ExportAlert(message: message))
+    }
+}
+
+/// 書き出し先の設定と、まとめて書き出し
+private struct ExportSettingsSection: View {
+    @Environment(BankStore.self) private var bankStore
+    @Environment(PlayStore.self) private var playStore
+    @State private var folderName = SessionExporter.chosenFolder?.lastPathComponent
+    @State private var picking = false
+    @State private var message: String?
+
+    var body: some View {
+        Section {
+            LabeledContent("追加の保存先", value: folderName ?? "なし")
+            Button(folderName == nil ? "保存先フォルダを選ぶ（iCloud Drive など）" : "保存先フォルダを選び直す") {
+                picking = true
+            }
+            if folderName != nil {
+                Button("追加の保存先をやめる", role: .destructive) {
+                    SessionExporter.setChosenFolder(nil)
+                    folderName = nil
+                }
+            }
+            let ended = playStore.sessions.filter(\.isEnded)
+            if !ended.isEmpty {
+                Button("これまでの記録をすべて書き出す（\(ended.count)件）") {
+                    var ok = 0
+                    var err: String?
+                    for s in ended {
+                        let r = SessionExporter.export(s, spec: bankStore.spec)
+                        if r.error == nil { ok += 1 } else { err = r.error }
+                    }
+                    message = "\(ok)件を書き出しました。" + (err.map { "\n" + $0 } ?? "")
+                }
+            }
+        } header: {
+            Text("記録の書き出し")
+        } footer: {
+            Text("記録を終えると、1回分が JSON ファイルで自動保存されます（「ファイル」アプリの SlotAnalyzer ›「実戦記録」）。iCloud Drive のフォルダを選ぶと、そこにも保存されて Mac から読めます。")
+        }
+        .fileImporter(isPresented: $picking, allowedContentTypes: [.folder]) { result in
+            if case .success(let url) = result, SessionExporter.setChosenFolder(url) {
+                folderName = url.lastPathComponent
+            } else {
+                message = "フォルダを選べませんでした。"
+            }
+        }
+        .exportAlert($message)
     }
 }
