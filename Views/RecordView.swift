@@ -7,18 +7,40 @@ struct RecordView: View {
     @Environment(ValidationStore.self) private var validationStore
 
     @AppStorage("record.youtubeURL") private var youtubeURL = ""
-    @AppStorage("record.showPlayer") private var showPlayer = true
+    @AppStorage("record.playerMode") private var playerMode = PlayerMode.app
     @State private var editingURL = false
     @State private var urlDraft = ""
+    @Environment(\.openURL) private var openURL
+
+    /// 上半分の使い方
+    enum PlayerMode: String, CaseIterable {
+        case app      // YouTubeアプリの小窓（ピクチャ・イン・ピクチャ）を置く場所として空ける
+        case embed    // アプリ内で再生（ログインなし）
+        case off      // 何も表示しない
+        var title: String {
+            switch self {
+            case .app: "YouTubeアプリの小窓を使う"
+            case .embed: "アプリ内で再生（ログインなし）"
+            case .off: "表示しない"
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                if showPlayer, let path = YouTubeLink.embedPath(from: youtubeURL) {
-                    YouTubePlayerView(embedPath: path)
-                        .aspectRatio(16 / 9, contentMode: .fit)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.black)
+                switch playerMode {
+                case .app:
+                    PiPSpace { openYouTubeApp() }
+                case .embed:
+                    if let path = YouTubeLink.embedPath(from: youtubeURL) {
+                        YouTubePlayerView(embedPath: path)
+                            .aspectRatio(16 / 9, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.black)
+                    }
+                case .off:
+                    EmptyView()
                 }
                 if let s = playStore.active {
                     ActiveSessionForm(session: s)
@@ -30,13 +52,18 @@ struct RecordView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { urlDraft = youtubeURL; editingURL = true } label: {
+                    Menu {
+                        Button { openYouTubeApp() } label: {
+                            Label("YouTubeアプリを開く", systemImage: "arrow.up.forward.app")
+                        }
+                        Button { urlDraft = youtubeURL; editingURL = true } label: {
+                            Label("動画のURLを設定", systemImage: "link")
+                        }
+                        Picker("上の部分", selection: $playerMode) {
+                            ForEach(PlayerMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                        }
+                    } label: {
                         Label("YouTube", systemImage: "play.rectangle")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    if YouTubeLink.embedPath(from: youtubeURL) != nil {
-                        Button(showPlayer ? "隠す" : "表示") { showPlayer.toggle() }
                     }
                 }
             }
@@ -44,13 +71,55 @@ struct RecordView: View {
                 TextField("https://www.youtube.com/watch?v=…", text: $urlDraft)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
-                Button("決定") { youtubeURL = urlDraft; showPlayer = true }
+                Button("決定") { youtubeURL = urlDraft }
                 Button("消す", role: .destructive) { youtubeURL = "" }
                 Button("キャンセル", role: .cancel) {}
             } message: {
-                Text("動画・ライブ・再生リストの URL を貼り付けてください。")
+                Text("動画・ライブ・再生リストの URL。設定すると「YouTubeアプリを開く」でその動画が開きます。")
             }
         }
+    }
+}
+
+extension RecordView {
+    /// 自分のアカウントでログイン済みの YouTube アプリを開く。URL があればその動画を開く
+    func openYouTubeApp() {
+        let s = youtubeURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = URL(string: s), YouTubeLink.embedPath(from: s) != nil {
+            // youtube.com の URL は、YouTube アプリが入っていればアプリで開かれる
+            openURL(url)
+        } else if let app = URL(string: "youtube://") {
+            openURL(app) { ok in
+                if !ok, let web = URL(string: "https://m.youtube.com/") { openURL(web) }
+            }
+        }
+    }
+}
+
+/// YouTube アプリの小窓（ピクチャ・イン・ピクチャ）を置くための空きスペース
+private struct PiPSpace: View {
+    let open: () -> Void
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+            .foregroundStyle(.secondary)
+            .overlay {
+                VStack(spacing: 8) {
+                    Text("YouTubeの小窓をここに置く")
+                        .font(.subheadline.bold())
+                    Text("YouTubeアプリで再生 → ホームに戻ると小窓になります")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("YouTubeアプリを開く", action: open)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
+                .padding(.horizontal)
+            }
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
     }
 }
 
