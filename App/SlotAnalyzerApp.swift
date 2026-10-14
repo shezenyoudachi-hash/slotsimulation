@@ -4,10 +4,13 @@ import SwiftUI
 struct SlotAnalyzerApp: App {
     @State private var store = BankStore()
     @State private var validationStore = ValidationStore()
+    @State private var playStore = PlayStore()
 
     var body: some Scene {
         WindowGroup {
             TabView {
+                RecordView()
+                    .tabItem { Label("記録", systemImage: "square.and.pencil") }
                 EstimateView()
                     .tabItem { Label("設定推測", systemImage: "chart.bar.xaxis") }
                 FluctuationView()
@@ -19,6 +22,7 @@ struct SlotAnalyzerApp: App {
             }
             .environment(store)
             .environment(validationStore)
+            .environment(playStore)
         }
     }
 }
