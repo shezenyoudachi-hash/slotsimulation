@@ -28,56 +28,60 @@ struct RecordView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                switch playerMode {
-                case .app:
-                    PiPSpace { openYouTubeApp() }
-                case .embed:
-                    if let path = YouTubeLink.embedPath(from: youtubeURL) {
-                        YouTubePlayerView(embedPath: path)
-                            .aspectRatio(16 / 9, contentMode: .fit)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.black)
-                    }
-                case .off:
-                    EmptyView()
+        // 小窓（ピクチャ・イン・ピクチャ）は画面の一番上に吸い付くので、
+        // 枠を NavigationStack の外の一番上に置き、タイトルやボタンはその下に出す
+        VStack(spacing: 0) {
+            switch playerMode {
+            case .app:
+                PiPSpace { openYouTubeApp() }
+            case .embed:
+                if let path = YouTubeLink.embedPath(from: youtubeURL) {
+                    YouTubePlayerView(embedPath: path)
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.black)
                 }
-                if let s = playStore.active {
-                    ActiveSessionForm(session: s)
-                } else {
-                    StartSessionForm()
-                }
+            case .off:
+                EmptyView()
             }
-            .navigationTitle("記録")
-            .navigationBarTitleDisplayMode(.inline)
-            .exportAlert(Bindable(playStore).lastExportMessage)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button { openYouTubeApp() } label: {
-                            Label("YouTubeアプリを開く", systemImage: "arrow.up.forward.app")
-                        }
-                        Button { urlDraft = youtubeURL; editingURL = true } label: {
-                            Label("動画のURLを設定", systemImage: "link")
-                        }
-                        Picker("上の部分", selection: $playerMode) {
-                            ForEach(PlayerMode.allCases, id: \.self) { Text($0.title).tag($0) }
-                        }
-                    } label: {
-                        Label("YouTube", systemImage: "play.rectangle")
+            NavigationStack {
+                Group {
+                    if let s = playStore.active {
+                        ActiveSessionForm(session: s)
+                    } else {
+                        StartSessionForm()
                     }
                 }
-            }
-            .alert("YouTube の URL", isPresented: $editingURL) {
-                TextField("https://www.youtube.com/watch?v=…", text: $urlDraft)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                Button("決定") { youtubeURL = urlDraft }
-                Button("消す", role: .destructive) { youtubeURL = "" }
-                Button("キャンセル", role: .cancel) {}
-            } message: {
-                Text("動画・ライブ・再生リストの URL。設定すると「YouTubeアプリを開く」でその動画が開きます。")
+                .navigationTitle("記録")
+                .navigationBarTitleDisplayMode(.inline)
+                .exportAlert(Bindable(playStore).lastExportMessage)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Menu {
+                            Button { openYouTubeApp() } label: {
+                                Label("YouTubeアプリを開く", systemImage: "arrow.up.forward.app")
+                            }
+                            Button { urlDraft = youtubeURL; editingURL = true } label: {
+                                Label("動画のURLを設定", systemImage: "link")
+                            }
+                            Picker("上の部分", selection: $playerMode) {
+                                ForEach(PlayerMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                            }
+                        } label: {
+                            Label("YouTube", systemImage: "play.rectangle")
+                        }
+                    }
+                }
+                .alert("YouTube の URL", isPresented: $editingURL) {
+                    TextField("https://www.youtube.com/watch?v=…", text: $urlDraft)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                    Button("決定") { youtubeURL = urlDraft }
+                    Button("消す", role: .destructive) { youtubeURL = "" }
+                    Button("キャンセル", role: .cancel) {}
+                } message: {
+                    Text("動画・ライブ・再生リストの URL。設定すると「YouTubeアプリを開く」でその動画が開きます。")
+                }
             }
         }
     }
