@@ -140,6 +140,7 @@ private struct StartSessionForm: View {
     @State private var big: Int?
     @State private var reg: Int?
     @State private var gap: Int?
+    @State private var confirmStart = false
 
     var body: some View {
         Form {
@@ -149,17 +150,8 @@ private struct StartSessionForm: View {
                 numberRow("BIG", $big)
                 numberRow("REG", $reg)
                 numberRow("スタート（今のハマり）", $gap)
-                Button("記録を始める") {
-                    var s = PlaySession()
-                    s.unit = unit
-                    s.machine = bankStore.spec.name
-                    s.startTotal = total ?? 0
-                    s.startBig = big ?? 0
-                    s.startReg = reg ?? 0
-                    s.startGap = gap ?? 0
-                    playStore.upsert(s)
-                }
-                .disabled(total == nil)
+                Button("記録を始める") { confirmStart = true }
+                    .disabled(total == nil)
             } header: {
                 Text("座った時のデータカウンター")
             } footer: {
@@ -167,6 +159,21 @@ private struct StartSessionForm: View {
             }
             HistorySection()
             ExportSettingsSection()
+        }
+        .alert("この数字で始めますか？", isPresented: $confirmStart) {
+            Button("始める") {
+                var s = PlaySession()
+                s.unit = unit
+                s.machine = bankStore.spec.name
+                s.startTotal = total ?? 0
+                s.startBig = big ?? 0
+                s.startReg = reg ?? 0
+                s.startGap = gap ?? 0
+                playStore.upsert(s)
+            }
+            Button("直す", role: .cancel) {}
+        } message: {
+            Text("総回転 \(total ?? 0)G\nBIG \(big ?? 0)回　REG \(reg ?? 0)回\nスタート \(gap ?? 0)G\n\nBIGとREGが逆になっていないか、カウンターと見比べてください。")
         }
     }
 
@@ -193,6 +200,7 @@ private struct ActiveSessionForm: View {
     @State private var gapInput: Int?
     @State private var askEnd = false
     @State private var endGapText = ""
+    @State private var editingStart = false
     @FocusState private var focused: Bool
 
     private var estimate: EstimateResult {
@@ -225,8 +233,16 @@ private struct ActiveSessionForm: View {
                     for i in idx.sorted(by: >) { s.hits.remove(at: i) }
                     playStore.upsert(s)
                 }
-                Text("着席時：\(session.startTotal)G・BIG \(session.startBig)・REG \(session.startReg)・スタート \(session.startGap)")
-                    .font(.footnote).foregroundStyle(.secondary)
+                Button {
+                    editingStart = true
+                } label: {
+                    HStack {
+                        Text("着席時：\(session.startTotal)G・BIG \(session.startBig)・REG \(session.startReg)・スタート \(session.startGap)")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Spacer()
+                        Text("直す").font(.footnote)
+                    }
+                }
             }
             Section {
                 Button("やめる（最後のスタートを入力）") { endGapText = ""; askEnd = true }
@@ -244,6 +260,9 @@ private struct ActiveSessionForm: View {
                 playStore.upsert(s)
             }
             Button("キャンセル", role: .cancel) {}
+        }
+        .sheet(isPresented: $editingStart) {
+            StartEditor(session: session) { playStore.upsert($0) }
         }
     }
 
@@ -303,28 +322,12 @@ private struct ActiveSessionForm: View {
 
     private var grapeSection: some View {
         Section {
-            HStack(spacing: 12) {
-                Button {
-                    var s = session
-                    s.pendingGrapes += 1
-                    playStore.upsert(s)
-                } label: {
-                    Text("ぶどう +1　（\(session.totalGrapes)）")
-                        .font(.title3.bold())
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(Color.green.opacity(0.85), in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundStyle(.white)
-                }
-                Button {
-                    var s = session
-                    s.pendingGrapes = max(s.pendingGrapes - 1, 0)
-                    playStore.upsert(s)
-                } label: {
-                    Text("−1").frame(width: 56, height: 52)
-                        .background(Color.secondary.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
-                }
+            GrapeCounter(count: session.totalGrapes) { delta in
+                var s = session
+                s.pendingGrapes = max(s.pendingGrapes + delta, 0)
+                playStore.upsert(s)
             }
-            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
             let st = session.grapeStats
             if st.games > 0 && st.count > 0 {
                 LabeledContent("ぶどう確率（当たりまで確定した区間）",
@@ -333,7 +336,122 @@ private struct ActiveSessionForm: View {
         } header: {
             Text("ぶどう")
         } footer: {
-            Text("ぶどうの確率はメーカーの公表値がないため、設定推測には使いません。記録と動画のネタ用です。")
+            Text("押すと震えてランプが光ります。ぶどうの確率はメーカーの公表値がないため、設定推測には使いません。")
+        }
+    }
+}
+
+/// ぶどうカウンター。押すたびにバイブし、ランプが一瞬光る（カウンター機のような見た目）
+private struct GrapeCounter: View {
+    let count: Int
+    let change: (Int) -> Void
+    @State private var lit = false
+    @State private var plusTaps = 0
+    @State private var minusTaps = 0
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                change(1)
+                plusTaps += 1
+                flash()
+            } label: {
+                HStack(spacing: 14) {
+                    // ランプ
+                    Circle()
+                        .fill(lit ? Color(red: 0.75, green: 1.0, blue: 0.35) : Color(red: 0.12, green: 0.30, blue: 0.10))
+                        .frame(width: 30, height: 30)
+                        .overlay(Circle().stroke(Color.white.opacity(lit ? 0.9 : 0.25), lineWidth: 2))
+                        .shadow(color: Color(red: 0.6, green: 1.0, blue: 0.3).opacity(lit ? 0.95 : 0), radius: lit ? 14 : 0)
+                    Text("\(count)")
+                        .font(.system(size: 34, weight: .heavy, design: .rounded).monospacedDigit())
+                        .contentTransition(.numericText())
+                    Spacer()
+                    Text("ぶどう +1").font(.title3.bold())
+                }
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, minHeight: 64)
+                .background(lit ? Color(red: 0.30, green: 0.75, blue: 0.20) : Color.green.opacity(0.85),
+                            in: RoundedRectangle(cornerRadius: 14))
+                .foregroundStyle(.white)
+                .scaleEffect(lit ? 0.97 : 1)
+            }
+            .sensoryFeedback(.impact(weight: .heavy, intensity: 1.0), trigger: plusTaps)
+
+            Button {
+                change(-1)
+                minusTaps += 1
+            } label: {
+                Text("−1").font(.headline).frame(width: 56, height: 64)
+                    .background(Color.secondary.opacity(0.2), in: RoundedRectangle(cornerRadius: 14))
+            }
+            .sensoryFeedback(.impact(weight: .light), trigger: minusTaps)
+        }
+        .buttonStyle(.plain)
+        .animation(.snappy(duration: 0.2), value: count)
+    }
+
+    private func flash() {
+        withAnimation(.easeOut(duration: 0.05)) { lit = true }
+        let tap = plusTaps
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            // 連打中は最後の1回の後に消す
+            if tap == plusTaps { withAnimation(.easeIn(duration: 0.3)) { lit = false } }
+        }
+    }
+}
+
+/// 着席時の数字（とやめた時のスタート）を直す画面
+private struct StartEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State var session: PlaySession
+    let save: (PlaySession) -> Void
+
+    init(session: PlaySession, save: @escaping (PlaySession) -> Void) {
+        _session = State(initialValue: session)
+        self.save = save
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    row("台番", value: Binding(get: { session.unit ?? 0 }, set: { session.unit = $0 == 0 ? nil : $0 }))
+                    row("総回転", value: $session.startTotal)
+                    row("BIG", value: $session.startBig)
+                    row("REG", value: $session.startReg)
+                    row("スタート（今のハマり）", value: $session.startGap)
+                    Button("BIGとREGを入れ替える") {
+                        let b = session.startBig
+                        session.startBig = session.startReg
+                        session.startReg = b
+                    }
+                } header: {
+                    Text("座った時のデータカウンター")
+                }
+                if session.isEnded {
+                    Section("やめた時") {
+                        row("スタート", value: Binding(get: { session.endGap ?? 0 }, set: { session.endGap = $0 }))
+                    }
+                }
+            }
+            .navigationTitle("記録を直す")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("保存") { save(session); dismiss() } }
+            }
+        }
+    }
+
+    private func row(_ title: String, value: Binding<Int>) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            TextField("0", value: value, format: .number)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 100)
         }
     }
 }
@@ -373,6 +491,7 @@ private struct SessionDetailView: View {
     @State private var added = false
     @State private var confirmDelete = false
     @State private var exportMessage: String?
+    @State private var editing = false
 
     var body: some View {
         if let s = playStore.sessions.first(where: { $0.id == sessionID }) {
@@ -397,6 +516,7 @@ private struct SessionDetailView: View {
                         if let r = s.validationRecord() { validationStore.append([r]); added = true }
                     }
                     .disabled(added)
+                    Button("着席時の数字を直す") { editing = true }
                     Button("ファイルに書き出し直す") {
                         exportMessage = SessionExporter.export(s, spec: bankStore.spec)
                             .message(fileName: SessionExporter.fileName(s))
@@ -409,6 +529,14 @@ private struct SessionDetailView: View {
                 Button("削除", role: .destructive) { playStore.delete(sessionID); dismiss() }
             }
             .exportAlert($exportMessage)
+            .sheet(isPresented: $editing) {
+                StartEditor(session: s) { fixed in
+                    playStore.upsert(fixed)
+                    added = false
+                    exportMessage = SessionExporter.export(fixed, spec: bankStore.spec)
+                        .message(fileName: SessionExporter.fileName(fixed))
+                }
+            }
         } else {
             Text("記録が見つかりません")
         }
