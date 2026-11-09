@@ -9,6 +9,8 @@ struct SlotAnalyzerApp: App {
     var body: some Scene {
         WindowGroup {
             TabView {
+                SitCheckView()
+                    .tabItem { Label("座る？", systemImage: "chair.lounge") }
                 RecordView()
                     .tabItem { Label("記録", systemImage: "square.and.pencil") }
                 EstimateView()
